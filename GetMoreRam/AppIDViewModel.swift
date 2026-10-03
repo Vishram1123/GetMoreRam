@@ -58,14 +58,53 @@ class AppIDModel : ObservableObject, Hashable {
 
         var lines: [String] = []
         for candidate in Self.hypervisorCapabilityCandidates {
-            do {
-                let updated = try await AppleAPI.shared.updateAppID(appID, capabilities: [candidate], team: team, session: session)
-                lines.append("\(candidate): OK -> \(updated)")
-            } catch {
-                lines.append("\(candidate): FAILED -> \(error.detailedDescription)")
-            }
+            lines.append("\(candidate): \(await rawUpdateAppID(capability: candidate, team: team, session: session))")
         }
         result = lines.joined(separator: "\n\n")
+    }
+
+    // `updateAppID` only recognizes a top-level "data" key as success or a top-level "error"
+    // *string* as failure, and throws a generic .badServerResponse for anything else - which
+    // swallows Apple's actual JSON:API error payload (a top-level "errors" *array* of objects with
+    // "code"/"title"/"detail"). sendEditRequest is the public primitive updateAppID calls
+    // internally, so call it directly here and dump Apple's raw response verbatim instead.
+    private func rawUpdateAppID(capability: String, team: Team, session: AppleAPISession) async -> String {
+        let url = AppleAPI.shared.v1URL.appendingPathComponent("bundleIds").appendingPathComponent(appID.identifier)
+
+        let payload: [String: Any] = [
+            "data": [
+                "type": "bundleIds",
+                "id": appID.identifier,
+                "attributes": [
+                    "identifier": appID.bundleIdentifier,
+                    "teamId": team.identifier,
+                    "seedId": team.identifier,
+                    "bundleType": "bundle",
+                    "name": appID.name,
+                    "hasExclusiveManagedCapabilities": false
+                ],
+                "relationships": [
+                    "bundleIdCapabilities": ["data": [[
+                        "type": "bundleIdCapabilities",
+                        "attributes": ["enabled": true, "settings": []],
+                        "relationships": [
+                            "capability": ["data": ["type": "capabilities", "id": capability]]
+                        ]
+                    ]]]
+                ]
+            ]
+        ]
+
+        do {
+            let response = try await AppleAPI.shared.sendEditRequest(requestURL: url, body: payload, session: session, json: true, appendClientId: false)
+            if let jsonData = try? JSONSerialization.data(withJSONObject: response, options: [.prettyPrinted, .sortedKeys]),
+               let pretty = String(data: jsonData, encoding: .utf8) {
+                return pretty
+            }
+            return "\(response)"
+        } catch {
+            return "Request itself failed: \(error.detailedDescription)"
+        }
     }
 
 }
