@@ -21,7 +21,17 @@ struct AppIDEditView : View {
                     Text("Add Increased Memory Limit")
                 }
             }
-            
+
+            Section {
+                Button(role: .destructive) {
+                    Task { await addHypervisor() }
+                } label: {
+                    Text("Add Hypervisor (Experimental)")
+                }
+            } footer: {
+                Text("Tries several guesses at Apple's capability id for the Hypervisor entitlement. Expected to fail - the response below is the useful part.")
+            }
+
             Section {
                 Text(viewModel.result)
                     .font(.system(.subheadline, design: .monospaced))
@@ -47,6 +57,15 @@ struct AppIDEditView : View {
             errorShow = true
         }
 
+    }
+
+    func addHypervisor() async {
+        do {
+            try await viewModel.addHypervisor()
+        } catch {
+            errorInfo = error.detailedDescription
+            errorShow = true
+        }
     }
 }
 

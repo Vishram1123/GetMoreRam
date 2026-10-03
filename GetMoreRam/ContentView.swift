@@ -18,6 +18,10 @@ struct ContentView: View {
                 .tabItem {
                     Label("Settings".loc, systemImage: "gearshape.fill")
                 }
+            EntitlementsView()
+                .tabItem {
+                    Label("Diagnostics".loc, systemImage: "stethoscope")
+                }
         }
 
         .environmentObject(DataManager.shared.model)
