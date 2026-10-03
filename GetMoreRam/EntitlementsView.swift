@@ -12,6 +12,17 @@
 
 import SwiftUI
 import Security
+import CoreFoundation
+
+// SecTaskCreateFromSelf/SecTaskCopyValueForEntitlement are declared in Security.framework's
+// headers on macOS but Apple does not expose them in the public iOS SDK headers, even though the
+// symbols are present in the on-device framework. Bind straight to the C symbols instead of relying
+// on the (absent) Swift overlay declaration.
+@_silgen_name("SecTaskCreateFromSelf")
+func SecTaskCreateFromSelf(_ allocator: CFAllocator?) -> CFTypeRef?
+
+@_silgen_name("SecTaskCopyValueForEntitlement")
+func SecTaskCopyValueForEntitlement(_ task: CFTypeRef, _ entitlement: CFString, _ error: UnsafeMutablePointer<Unmanaged<CFError>?>?) -> CFTypeRef?
 
 struct EntitlementCheck: Identifiable {
     let id = UUID()
