@@ -96,6 +96,27 @@ struct AppIDView : View {
                         Task { await refreshButtonClicked() }
                     }
                 }
+
+                Section {
+                    Button("Dump macOS Capability Catalog") {
+                        Task { await catalogButtonClicked(platform: "MAC_OS") }
+                    }
+                    Button("Dump iOS Capability Catalog") {
+                        Task { await catalogButtonClicked(platform: "IOS") }
+                    }
+                } footer: {
+                    Text("Looks up Apple's real capability id strings (and backing entitlement keys) instead of guessing them, by querying GET /v1/capabilities with a platform filter.")
+                }
+
+                if !viewModel.capabilityCatalogResult.isEmpty {
+                    Section {
+                        Text(viewModel.capabilityCatalogResult)
+                            .font(.system(.footnote, design: .monospaced))
+                            .textSelection(.enabled)
+                    } header: {
+                        Text("Capability Catalog")
+                    }
+                }
             }
             .alert("Error", isPresented: $errorShow){
                 Button("OK".loc, action: {
@@ -106,10 +127,19 @@ struct AppIDView : View {
         }
         .navigationViewStyle(StackNavigationViewStyle())
     }
-    
+
     func refreshButtonClicked() async {
         do {
             try await viewModel.fetchAppIDs()
+        } catch {
+            errorInfo = error.detailedDescription
+            errorShow = true
+        }
+    }
+
+    func catalogButtonClicked(platform: String) async {
+        do {
+            try await viewModel.fetchCapabilityCatalog(platform: platform)
         } catch {
             errorInfo = error.detailedDescription
             errorShow = true

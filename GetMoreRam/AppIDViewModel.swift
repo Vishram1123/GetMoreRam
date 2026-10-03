@@ -111,18 +111,68 @@ class AppIDModel : ObservableObject, Hashable {
 
 class AppIDViewModel : ObservableObject {
     @Published var appIDs : [AppIDModel] = []
-    
+    @Published var capabilityCatalogResult: String = ""
+
     func fetchAppIDs() async throws {
         guard let team = DataManager.shared.model.team, let session = DataManager.shared.model.session else {
             throw "Please Login First"
         }
-        
+
         let ids = try await AppleAPI.shared.fetchAppIDsForTeam(team: team, session: session)
         await MainActor.run {
             appIDs.removeAll()
             for id in ids {
                 appIDs.append(AppIDModel(appID: id))
             }
+        }
+    }
+
+    // fetchCapabilitiesForTeam() (StosSign) hardcodes filter[platform]=IOS, which is useless for
+    // finding macOS-only capabilities like Hypervisor/Virtualization. sendServicesRequest is
+    // public, so replicate the same GET /v1/capabilities call with a different platform filter to
+    // get Apple's real capability id strings (and their backing entitlement keys) instead of
+    // guessing them.
+    func fetchCapabilityCatalog(platform: String) async throws {
+        guard let team = DataManager.shared.model.team, let session = DataManager.shared.model.session else {
+            throw "Please Login First"
+        }
+
+        let url = AppleAPI.shared.v1URL.appendingPathComponent("capabilities")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+
+        let response = try await AppleAPI.shared.sendServicesRequest(originalRequest: request, additionalParameters: ["filter[platform]": platform], session: session, team: team)
+
+        guard let rawData = response["data"] else {
+            await MainActor.run { capabilityCatalogResult = "No \"data\" key. Raw response:\n\(response)" }
+            return
+        }
+
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: rawData),
+              let capabilities = try? JSONDecoder().decode([Capability].self, from: jsonData) else {
+            await MainActor.run { capabilityCatalogResult = "Couldn't decode as [Capability]. Raw data:\n\(rawData)" }
+            return
+        }
+
+        let lines = capabilities
+            .sorted { $0.id < $1.id }
+            .map { cap -> String in
+                let entitlementKeys = (cap.attributes.entitlements ?? []).map { $0.key }.joined(separator: ", ")
+                return "\(cap.id)  [\(entitlementKeys)]"
+            }
+
+        let highlighted = lines.filter { $0.lowercased().contains("hyperv") || $0.lowercased().contains("virtual") }
+
+        await MainActor.run {
+            capabilityCatalogResult = """
+            Platform: \(platform)  |  Total capabilities: \(capabilities.count)
+
+            --- Matches for "hyperv"/"virtual" ---
+            \(highlighted.isEmpty ? "(none)" : highlighted.joined(separator: "\n"))
+
+            --- Full catalog ---
+            \(lines.joined(separator: "\n"))
+            """
         }
     }
 }
