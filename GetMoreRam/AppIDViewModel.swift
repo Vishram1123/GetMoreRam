@@ -132,7 +132,7 @@ class AppIDViewModel : ObservableObject {
     // public, so replicate the same GET /v1/capabilities call with a different platform filter to
     // get Apple's real capability id strings (and their backing entitlement keys) instead of
     // guessing them.
-    func fetchCapabilityCatalog(platform: String) async throws {
+    func fetchCapabilityCatalog(platform: String?) async throws {
         guard let team = DataManager.shared.model.team, let session = DataManager.shared.model.session else {
             throw "Please Login First"
         }
@@ -141,7 +141,16 @@ class AppIDViewModel : ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
 
-        let response = try await AppleAPI.shared.sendServicesRequest(originalRequest: request, additionalParameters: ["filter[platform]": platform], session: session, team: team)
+        let params: [String: String]? = platform.map { ["filter[platform]": $0] }
+        let response = try await AppleAPI.shared.sendServicesRequest(originalRequest: request, additionalParameters: params, session: session, team: team)
+
+        // Dump every top-level key besides "data" first - if Apple's actually paginating this
+        // (JSON:API usually does via "links"/"meta") and we only ever decode "data", an 11-item
+        // list could just be page 1 silently truncated rather than the real, complete catalog.
+        var otherKeysDump = ""
+        for key in response.keys where key != "data" {
+            otherKeysDump += "\(key): \(response[key] ?? "nil")\n"
+        }
 
         guard let rawData = response["data"] else {
             await MainActor.run { capabilityCatalogResult = "No \"data\" key. Raw response:\n\(response)" }
@@ -165,7 +174,10 @@ class AppIDViewModel : ObservableObject {
 
         await MainActor.run {
             capabilityCatalogResult = """
-            Platform: \(platform)  |  Total capabilities: \(capabilities.count)
+            Platform filter: \(platform ?? "(none)")  |  Total capabilities: \(capabilities.count)
+
+            --- Other top-level response keys (pagination/meta would show here) ---
+            \(otherKeysDump.isEmpty ? "(none besides \"data\")" : otherKeysDump)
 
             --- Matches for "hyperv"/"virtual" ---
             \(highlighted.isEmpty ? "(none)" : highlighted.joined(separator: "\n"))

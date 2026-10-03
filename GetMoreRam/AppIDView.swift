@@ -104,8 +104,11 @@ struct AppIDView : View {
                     Button("Dump iOS Capability Catalog") {
                         Task { await catalogButtonClicked(platform: "IOS") }
                     }
+                    Button("Dump Capability Catalog (no filter)") {
+                        Task { await catalogButtonClicked(platform: nil) }
+                    }
                 } footer: {
-                    Text("Looks up Apple's real capability id strings (and backing entitlement keys) instead of guessing them, by querying GET /v1/capabilities with a platform filter.")
+                    Text("Looks up Apple's real capability id strings (and backing entitlement keys) instead of guessing them, by querying GET /v1/capabilities. Also dumps any non-\"data\" top-level keys (links/meta) in case the 11-item list is a paginated page 1 rather than the whole catalog.")
                 }
 
                 if !viewModel.capabilityCatalogResult.isEmpty {
@@ -137,7 +140,7 @@ struct AppIDView : View {
         }
     }
 
-    func catalogButtonClicked(platform: String) async {
+    func catalogButtonClicked(platform: String?) async {
         do {
             try await viewModel.fetchCapabilityCatalog(platform: platform)
         } catch {
